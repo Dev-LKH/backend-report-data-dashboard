@@ -1,5 +1,6 @@
 import e from "express";
 import { getPatients, getStats, getPatientsByDay, getPatientVisitDetails, getDoctorStats, getAnalytics, getVisitTimeline, getFilterOptions, getOpdOutstanding, getDeptSummary, getItemDetail } from "../services/patientService.js";
+import { getCaseList } from "../services/patientService.js";
 
 export const fetchPatients = async (req, res) => {
   const data = await getPatients();
@@ -222,3 +223,34 @@ export const fetchItemDetail = async (req, res) => {
     res.status(500).json({ error: err.message})
   }
 }
+
+export const fetchCaseList = async (req, res) => {
+  try {
+    const {
+      startDate,
+      endDate,
+      patientType = null,
+      department  = null,
+      doctor      = null,
+      billStatus  = null,
+    } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: "startDate and endDate are required" });
+    }
+
+    const data = await getCaseList({
+      startDate,
+      endDate,
+      patientType: patientType || null,
+      department:  department  || null,
+      doctor:      doctor      || null,
+      billStatus:  billStatus  || null,
+    });
+
+    res.json(data);
+  } catch (err) {
+    console.error("fetchCaseList error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};

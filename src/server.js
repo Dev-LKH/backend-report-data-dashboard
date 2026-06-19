@@ -11,7 +11,8 @@ import {
   fetchFilterOptions, 
   fetchOpdOutstanding, 
   fetchDeptSummary,
-  fetchItemDetail
+  fetchItemDetail,
+  fetchCaseList,
 } from "./controllers/patientController.js";
 
 const app = express();
@@ -27,6 +28,8 @@ app.get("/api/filter-options", fetchFilterOptions)
 app.get("/api/opd-outstanding", fetchOpdOutstanding)
 app.get("/api/dept-summary", fetchDeptSummary)
 app.get("/api/item-detail", fetchItemDetail)
+app.get("/api/case-list", fetchCaseList)
+
 console.log("registered: /api/doctor-stats")
 
 
