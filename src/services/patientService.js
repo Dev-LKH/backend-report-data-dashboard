@@ -48,7 +48,7 @@ export const getStats = async (startDate, endDate, patientType = null) => {
   LEFT JOIN (
     SELECT
       c."MRN_id",
-      t2.department_id,
+      c.department_id,
       COALESCE(SUM(li.line_total), 0) AS revenue
     FROM medrec_case c
     LEFT JOIN (
