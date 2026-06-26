@@ -18,4 +18,5 @@ router.get("/doctor-stats", fetchDoctorStats);
 router.get("/case-list", fetchCaseList);   // เพิ่มตรงนี้
 router.get("/visit-detail", fetchPatientVisitDetails);  // ✅ เพิ่ม /
 
+
 export default router;

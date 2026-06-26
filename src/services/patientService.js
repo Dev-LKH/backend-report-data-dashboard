@@ -1003,3 +1003,130 @@ export const getCaseList = async ({
     items:            itemMap.get(toNum(r.bill_id)) ?? [],
   }));
 };
+
+// ─── getPatientNewVsReturning ───────────────────────────────────────────────────
+
+export const getPatientNewVsReturning = async (startDate, endDate, patientType = null, department = null) => {
+  const conditions = [`DATE(vp."createdAt" AT TIME ZONE 'Asia/Bangkok') BETWEEN $1 AND $2`];
+  const params = [startDate, endDate];
+  let idx = 3;
+
+  if (patientType) { conditions.push(`mr."patientType" = $${idx++}`); params.push(patientType); }
+  if (department)  { conditions.push(`d.name = $${idx++}`);           params.push(department); }
+
+  const WHERE = conditions.join(" AND ");
+
+  // ── รายชื่อ + flag เก่า/ใหม่ ──────────────────────────────────────────────
+  const { rows } = await pool.query(
+    `
+    WITH first_visit AS (
+      SELECT
+        mr."HN_id" AS hn_id,
+        MIN(vp."createdAt") AS first_visit_at
+      FROM medrec_visitingpatient vp
+      JOIN medrec_medicalrecord mr ON mr."MRN"::text = vp."MRN_id"::text
+      GROUP BY mr."HN_id"
+    )
+    SELECT
+      vp.id                                                          AS visit_id,
+      pp."HN",
+      pp.firstname || ' ' || pp.surname                             AS patient_name,
+      mr."patientType"                                              AS patient_type,
+      DATE(vp."createdAt" AT TIME ZONE 'Asia/Bangkok')              AS visit_date,
+      TO_CHAR(vp."createdAt" AT TIME ZONE 'Asia/Bangkok', 'HH24:MI') AS visit_time,
+      COALESCE(d.name, 'ไม่ระบุแผนก')                               AS department,
+      CASE
+        WHEN DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') >= $1
+         AND DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') <= $2
+        THEN 'ใหม่'
+        ELSE 'เก่า'
+      END AS patient_status
+    FROM medrec_visitingpatient vp
+    JOIN medrec_medicalrecord mr ON mr."MRN"::text   = vp."MRN_id"::text
+    JOIN patient_patient pp      ON pp.id            = mr."HN_id"
+    JOIN first_visit fv          ON fv.hn_id         = mr."HN_id"
+    JOIN medrec_case c            ON c."MRN_id"::text = vp."MRN_id"::text
+    LEFT JOIN (
+      SELECT DISTINCT ON (case_id) case_id, department_id
+      FROM medrec_treatment ORDER BY case_id, id
+    ) t ON t.case_id = c.id
+    LEFT JOIN hospital_department d ON d.id = t.department_id
+    WHERE ${WHERE}
+    ORDER BY vp."createdAt" DESC
+    `,
+    params
+  );
+
+  // ── สรุปรายวัน ──────────────────────────────────────────────────────────
+  const { rows: summaryRows } = await pool.query(
+    `
+    WITH first_visit AS (
+      SELECT
+        mr."HN_id" AS hn_id,
+        MIN(vp."createdAt") AS first_visit_at
+      FROM medrec_visitingpatient vp
+      JOIN medrec_medicalrecord mr ON mr."MRN"::text = vp."MRN_id"::text
+      GROUP BY mr."HN_id"
+    )
+    SELECT
+      DATE(vp."createdAt" AT TIME ZONE 'Asia/Bangkok') AS day,
+      COUNT(DISTINCT vp.id) FILTER (
+        WHERE DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') >= $1
+          AND DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') <= $2
+      ) AS new_patients,
+      COUNT(DISTINCT vp.id) FILTER (
+        WHERE NOT (
+          DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') >= $1
+          AND DATE(fv.first_visit_at AT TIME ZONE 'Asia/Bangkok') <= $2
+        )
+      ) AS returning_patients
+    FROM medrec_visitingpatient vp
+    JOIN medrec_medicalrecord mr ON mr."MRN"::text = vp."MRN_id"::text
+    JOIN first_visit fv          ON fv.hn_id       = mr."HN_id"
+    JOIN medrec_case c            ON c."MRN_id"::text = vp."MRN_id"::text
+    LEFT JOIN (
+      SELECT DISTINCT ON (case_id) case_id, department_id
+      FROM medrec_treatment ORDER BY case_id, id
+    ) t ON t.case_id = c.id
+    LEFT JOIN hospital_department d ON d.id = t.department_id
+    WHERE ${WHERE}
+    GROUP BY DATE(vp."createdAt" AT TIME ZONE 'Asia/Bangkok')
+    ORDER BY day ASC
+    `,
+    params
+  );
+
+  const patients = rows.map((r) => ({
+    visitId:       toNum(r.visit_id),
+    hn:            r.HN,
+    patientName:   r.patient_name,
+    patientType:   r.patient_type,
+    visitDate:     r.visit_date,
+    visitTime:     r.visit_time,
+    department:    r.department,
+    patientStatus: r.patient_status,
+  }));
+
+  const summary = summaryRows.map((r) => ({
+    day:               toDay(r.day),
+    label: new Date(toDay(r.day) + "T12:00:00").toLocaleDateString("th-TH", {
+      day: "numeric", month: "short", year: "numeric",
+    }),
+    newPatients:       toNum(r.new_patients),
+    returningPatients: toNum(r.returning_patients),
+  }));
+
+  const totalNew       = patients.filter((p) => p.patientStatus === "ใหม่").length;
+  const totalReturning = patients.filter((p) => p.patientStatus === "เก่า").length;
+
+  return {
+    patients,
+    summary,
+    totals: {
+      totalNew,
+      totalReturning,
+      total: totalNew + totalReturning,
+      newPct: totalNew + totalReturning > 0 ? Math.round((totalNew / (totalNew + totalReturning)) * 100) : 0,
+    },
+  };
+};

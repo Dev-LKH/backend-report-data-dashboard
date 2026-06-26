@@ -13,6 +13,7 @@ import {
   fetchDeptSummary,
   fetchItemDetail,
   fetchCaseList,
+  fetchPatientNewVsReturning,
 } from "./controllers/patientController.js";
 
 const app = express();
@@ -29,6 +30,7 @@ app.get("/api/opd-outstanding", fetchOpdOutstanding)
 app.get("/api/dept-summary", fetchDeptSummary)
 app.get("/api/item-detail", fetchItemDetail)
 app.get("/api/case-list", fetchCaseList)
+app.get("/api/patient-new-vs-returning", fetchPatientNewVsReturning)
 
 console.log("registered: /api/doctor-stats")
 

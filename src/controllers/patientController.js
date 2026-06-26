@@ -1,6 +1,7 @@
 import e from "express";
 import { getPatients, getStats, getPatientsByDay, getPatientVisitDetails, getDoctorStats, getAnalytics, getVisitTimeline, getFilterOptions, getOpdOutstanding, getDeptSummary, getItemDetail } from "../services/patientService.js";
 import { getCaseList } from "../services/patientService.js";
+import { getPatientNewVsReturning } from "../services/patientService.js";
 
 export const fetchPatients = async (req, res) => {
   const data = await getPatients();
@@ -251,6 +252,38 @@ export const fetchCaseList = async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("fetchCaseList error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const fetchPatientNewVsReturning = async (req, res) => {
+  try {
+    const { start, end, range, patientType, department } = req.query;
+    let startDate, endDate;
+    endDate = new Date().toISOString().slice(0, 10);
+
+    if (start && end) {
+      startDate = start;
+      endDate = end;
+    } else if (range === "month") {
+      const d = new Date(); d.setMonth(d.getMonth() - 1);
+      startDate = d.toISOString().slice(0, 10);
+    } else if (range === "year") {
+      const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+      startDate = d.toISOString().slice(0, 10);
+    } else if (range === "all") {
+      startDate = "2025-01-01";
+    } else {
+      const d = new Date(); d.setDate(d.getDate() - 6);
+      startDate = d.toISOString().slice(0, 10);
+    }
+
+    const data = await getPatientNewVsReturning(
+      startDate, endDate, patientType || null, department || null
+    );
+    res.json(data);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 };
